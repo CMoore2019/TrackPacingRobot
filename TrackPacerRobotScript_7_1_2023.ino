@@ -30,6 +30,10 @@ unsigned long StartTime; //stores start time of rep by calling micros(), will ov
 unsigned long PreviousTime; //stores last time micros() was called to find delta T
 int offlinecounter = 0; //stores number of times camera doesn't detect the line in a row
 float previousangle = 0.0;
+float accumulatedsteeringerror = 0.0;
+float previoussteeringerror = 0.0;
+float SteeringServoPos = 0.0;
+float SpeedServoPos = 0.0;
 int STATE = 0;
 
 //Values adjustable, however: MaxPace*MaxDist*2500 must not exceed UL limit of 4,294,967,295
@@ -38,7 +42,9 @@ int MaxDist = 10000; //maximum allowable distance in meters (must be between 3-5
 int MinPace = 120; //minimum allowable time per 400m lap in seconds (must be between 2-3 digits long)
 int MaxPace = 170; //maximum allowable time per 400m lap in seconds (must be between 2-3 digits long)
 
-//Physical camera distances and measurements
+//Physical distances and measurements
+float MaxSteeringServoPos = 30; //TODO
+float MinSteeringServoPos = -30; //TODO
 int framewidth = 79;
 int frameheight = 52;
 float worldx1 = -0.22; //TODO
@@ -73,16 +79,18 @@ float getxdistance(int pixelx, float disty) { //STATUS: COMPLETE BUT UNTESTED
   return xdistance;
 }
 
-void SetSteeringAngle(control) { //STATUS: INCOMPLETE
-  //TODO
+void SetSteeringAngle(float control) { //STATUS: INCOMPLETE
+  //TODO once new hardware is selected
+  SteeringServoPos = control;
 }
 
-void SetMotorSpeed(control) { //STATUS: INCOMPLETE
-  //TODO
+void SetMotorSpeed(float control) { //STATUS: INCOMPLETE
+  //TODO once new hardware is selected.  Input of 0.0 should result in braking.
+  SpeedServoPos = control;
 }
 
 void Brake() { //STATUS: COMPLETE BUT UNTESTED
-  SetMotorSpeed(0);
+  SetMotorSpeed(0.0);
 }
 
 float SpeedController() { //STATUS: COMPLETE BUT UNTESTED
@@ -92,10 +100,30 @@ float SpeedController() { //STATUS: COMPLETE BUT UNTESTED
   return control
 }
 
-float SteeringController(float PV, unsigned long deltaT) { //STATUS: INCOMPLETE
+float SteeringController(float PV, unsigned long deltaT) { //STATUS: COMPLETE BUT UNTESTED
   //PID Controller for Steering
   //deltaT is in microseconds, control should be adjusted accordingly
-  //TODO
+  //Inputs:
+  //PV: float from -90 to 90 [angle between heading and vector center]
+  //deltaT: unsigned long [time in microseconds since last iteration]
+  //Returns:
+  //control: float [angle from heading that the robot should move toward]
+  float Kp = 0.4;
+  float Ki = 0.0;
+  float Kd = 5.0;
+  float sp = 0.0;
+  float error = sp-PV;
+  accumulatedsteeringerror = accumulatedsteeringerror + error;
+  float control = (Kp*error) + (deltaT*Ki*accumulatedsteeringerror) + float((Kd*(error-previoussteeringerror))/deltaT);
+  previoussteeringerror = error;
+
+  if (control > MaxSteeringServoPos) { //set maximum control values, cutoff if higher
+    control = MaxSteeringServoPos;
+  }
+  else if (control < MinSteeringServoPos) { //set minimum control values, cutoff if higher
+    control = MinSteeringServoPos;
+  }
+  return control;
 }
 
 struct features getfeatures(){ //STATUS: COMPLETE BUT UNTESTED
@@ -161,6 +189,8 @@ void Finished() { //STATUS: COMPLETE BUT UNTESTED
   Pace = -1;
   offlinecounter = 0;
   previousangle = 0;
+  accumulatedsteeringerror = 0.0;
+  previoussteeringerror = 0.0;
   //Handle STATE Change
   STATE = 3;
 }
